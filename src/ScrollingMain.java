@@ -22,14 +22,14 @@ import javax.swing.JFrame;
 
 import com.google.gson.Gson;
 
-public class Main extends Canvas implements KeyListener, MouseMotionListener {
+public class ScrollingMain extends Canvas implements KeyListener, MouseMotionListener {
 	public static void main(String[] args) {
-		new Main();
+		new ScrollingMain();
 	}
 
 	private JFrame frame;
 
-	public Main() {
+	public ScrollingMain() {
 
 		frame = new JFrame();
 		frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
