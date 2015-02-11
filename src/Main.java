@@ -18,6 +18,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 import javax.imageio.ImageIO;
+import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 
 import com.google.gson.Gson;
@@ -91,7 +92,7 @@ public class Main extends Canvas implements KeyListener, MouseMotionListener {
 						for (Image image : response.data) {
 							if (!(image.nsfw && filterNSFW) && !image.type.equals("image/gif")) {
 								String url = "http://imgur.com/" + (image.id) + (parseExtension(image.type));
-								currentimage = ImageIO.read(new URL(url));
+								currentimage = convertImage(new ImageIcon(new URL(url)).getImage());
 								currentimage = getScaledImage(currentimage, getWidth(), getHeight());
 								repaint();
 								Thread.sleep(SLEEPTIME);
@@ -104,6 +105,12 @@ public class Main extends Canvas implements KeyListener, MouseMotionListener {
 				}
 	}
 
+	private BufferedImage convertImage(java.awt.Image image){
+		BufferedImage buffer = new BufferedImage(image.getWidth(null), image.getHeight(null), BufferedImage.TYPE_INT_ARGB);
+		buffer.getGraphics().drawImage(image, 0, 0, null);
+		return buffer;
+	}
+	
 	private String parseExtension(String type) {
 		if (type.equals("image/jpeg")) {
 			return ".jpg";

@@ -16,13 +16,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 
 import javax.imageio.ImageIO;
+import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 
 import com.google.gson.Gson;
 
-public class ScrollingMain extends Canvas implements KeyListener, MouseMotionListener {
+public class ScrollingMain extends Canvas implements KeyListener,
+		MouseMotionListener {
 	public static void main(String[] args) {
 		new ScrollingMain();
 	}
@@ -43,41 +46,64 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 		requestFocus();
 
 		// Transparent 16 x 16 pixel cursor image.
-		BufferedImage cursorImg = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+		BufferedImage cursorImg = new BufferedImage(16, 16,
+				BufferedImage.TYPE_INT_ARGB);
 
 		// Create a new blank cursor.
-		Cursor blankCursor = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new Point(0, 0), "blank cursor");
+		Cursor blankCursor = Toolkit.getDefaultToolkit().createCustomCursor(
+				cursorImg, new Point(0, 0), "blank cursor");
 
 		// Set the blank cursor to the JFrame.
 		frame.getContentPane().setCursor(blankCursor);
 
-		int pages = Integer.parseInt(new Variable("imgurscreensaver", "pages", "10", false).getValue());
+		final int pages = Integer.parseInt(new Variable("imgurscreensaver",
+				"pages", "10", false).getValue());
 
-		loopPages(pages, new Variable("imgurscreensaver", "subreddit", "annakendrick", false).getValue());
+		new Thread(new Runnable() {
+			public void run() {
+				loopPages(pages, new Variable("imgurscreensaver", "subreddit",
+						"annakendrick", false).getValue());
+			}
+		}).start();
+		while (true) {
+			try {
+				Thread.sleep(35);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			repaint();
+		}
 
 	}
 
+	private double timeOff = 0;
+
 	private void loopPages(int pages, String subreddit) {
 		while (true)
-			for (int i = 0; i < pages; i++)
+			for (int page = 0; page < pages; page++)
 				try {
 
-					String path = "https://api.imgur.com/3/gallery/r/" + subreddit + "/time/" + i + ".json";
+					String path = "https://api.imgur.com/3/gallery/r/"
+							+ subreddit + "/time/" + page + ".json";
 
-					HttpURLConnection connection = (HttpURLConnection) ((new URL(path)).openConnection());
+					HttpURLConnection connection = (HttpURLConnection) ((new URL(
+							path)).openConnection());
 
 					System.out.println("Connecting...");
 
 					connection.setRequestMethod("GET");
 					// TODO Auto-generated catch block
-					connection.addRequestProperty("Authorization", "client-id 76535d44f1f94da");
+					connection.addRequestProperty("Authorization",
+							"client-id 76535d44f1f94da");
 					connection.connect();
 
-					System.out.println("Response recieved with code " + connection.getResponseCode());
+					System.out.println("Response recieved with code "
+							+ connection.getResponseCode());
 
 					if (connection.getResponseCode() == 200) {
 
-						InputStream responseStream = connection.getInputStream();
+						InputStream responseStream = connection
+								.getInputStream();
 						StringBuilder builder = new StringBuilder();
 						int j = -1;
 						while ((j = responseStream.read()) != -1)
@@ -86,22 +112,44 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 						System.out.println(builder.toString());
 
 						Gson gson = new Gson();
-						ImageArray response = gson.fromJson(builder.toString(), ImageArray.class);
+						ImageArray response = gson.fromJson(builder.toString(),
+								ImageArray.class);
 
-						for (Image image : response.data) {
-							if (!(image.nsfw && filterNSFW) && !image.type.equals("image/gif")) {
-								String url = "http://imgur.com/" + (image.id) + (parseExtension(image.type));
-								currentimage = ImageIO.read(new URL(url));
-								currentimage = getScaledImage(currentimage, getWidth(), getHeight());
-								repaint();
+						for (int imageCounter = 0; imageCounter < response.data.length;) {
+
+							Image image = response.data[imageCounter];
+
+							if(image.type.equals("image/gif")) imageCounter ++;
+							
+							else if (!(image.nsfw && filterNSFW)
+									&& images.size() < 6) {
+								String url = "http://imgur.com/" + (image.id)
+										+ (parseExtension(image.type));
+								BufferedImage toAdd = convertImage(new ImageIcon(
+										new URL(url)).getImage());
+								toAdd = getScaledImage(toAdd, getWidth(),
+										getHeight());
+								synchronized (images) {
+									images.add(toAdd);
+								}
+								imageCounter++;
+							} else {
 								Thread.sleep(SLEEPTIME);
 							}
+
 						}
 
 					}
 				} catch (Exception e) {
 
 				}
+	}
+
+	private BufferedImage convertImage(java.awt.Image image) {
+		BufferedImage buffer = new BufferedImage(image.getWidth(null),
+				image.getHeight(null), BufferedImage.TYPE_INT_ARGB);
+		buffer.getGraphics().drawImage(image, 0, 0, null);
+		return buffer;
 	}
 
 	private String parseExtension(String type) {
@@ -116,9 +164,12 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 		}
 	}
 
-	private boolean filterNSFW = Boolean.parseBoolean(new Variable("imgurscreensaver", "filterNSFW", "true", false).getValue());
-	private BufferedImage currentimage;
-	private static final long SLEEPTIME = Long.parseLong(new Variable("imgurscreensaver", "SLEEPTIME", "1300", false).getValue());
+	private ArrayList<BufferedImage> images = new ArrayList<BufferedImage>();
+
+	private boolean filterNSFW = Boolean.parseBoolean(new Variable(
+			"imgurscreensaver", "filterNSFW", "true", false).getValue());
+
+	private static final long SLEEPTIME = 500;
 
 	public void update(Graphics g) {
 		java.awt.Image buffer = createImage(getWidth(), getHeight());
@@ -127,7 +178,8 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 		g.drawImage(buffer, 0, 0, null);
 	}
 
-	private BufferedImage getScaledImage(BufferedImage image, int width, int height) throws IOException {
+	private BufferedImage getScaledImage(BufferedImage image, int width,
+			int height) throws IOException {
 
 		int imageWidth = image.getWidth();
 		int imageHeight = image.getHeight();
@@ -136,44 +188,41 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 		double scaleX = (double) width / imageWidth;
 
 		double aspect = (double) imageWidth / imageHeight;
-		double screenAspect = ((double)getWidth()/getHeight());
+		double screenAspect = ((double) getWidth() / getHeight());
 		System.out.println("" + aspect + "\n" + screenAspect);
 		// fill or fit bit
-		
-		if (aspect < screenAspect || aspect > 2)
-			if (scaleX > scaleY)
-				scaleX = scaleY;
-			else
-				scaleY = scaleX;
-		
-		//this is fill. fill if aspect is between screen aspect and 2
+
+		if (scaleX > scaleY)
+			scaleX = scaleY;
 		else
-			if (scaleX < scaleY)
-				scaleX = scaleY;
-			else
-				scaleY = scaleX;
+			scaleY = scaleX;
 
 		// give us the transform object thing
-		AffineTransform scaleTransform = AffineTransform.getScaleInstance(scaleX, scaleY);
+		AffineTransform scaleTransform = AffineTransform.getScaleInstance(
+				scaleX, scaleY);
 
 		// then make the scaling algorithm thing.
-		AffineTransformOp bilinearScaleOp = new AffineTransformOp(scaleTransform, AffineTransformOp.TYPE_BILINEAR);
+		AffineTransformOp bilinearScaleOp = new AffineTransformOp(
+				scaleTransform, AffineTransformOp.TYPE_BILINEAR);
 
 		// out new image that we need to crop onto the buffer with the right
 		// dimensions.
-		BufferedImage newImage = bilinearScaleOp.filter(image, new BufferedImage((int) (imageWidth * scaleX), (int) (imageHeight * scaleY), image.getType()));
+		BufferedImage newImage = bilinearScaleOp.filter(image,
+				new BufferedImage((int) (imageWidth * scaleX),
+						(int) (imageHeight * scaleY), image.getType()));
 		// Image newImage = image.getScaledInstance((int) (imageWidth * scaleX),
 		// (int) (imageWidth * scaleY), Image.SCALE_SMOOTH);
 
 		// make the buffer
-		BufferedImage buffer = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+		BufferedImage buffer = new BufferedImage((int) (imageWidth * scaleX),
+				(int) (imageHeight * scaleY), BufferedImage.TYPE_INT_ARGB);
 		Graphics g = buffer.getGraphics();
 
 		int newImageWidth = newImage.getWidth(null);
 		int newImageHeight = newImage.getHeight(null);
 
 		// do math, shove it on.
-		g.drawImage(newImage, (width - newImageWidth) / 2, (height - newImageHeight) / 2, null);
+		g.drawImage(newImage, 0, 0, null);
 
 		// return dat
 		return buffer;
@@ -188,12 +237,24 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 		try {
 			// BufferedImage image = (BufferedImage) ImageIO.read(new
 			// URL(currentURL));
+			if (images.size() > 0) {
+				g.setColor(Color.BLACK);
+				g.fillRect(0, 0, getWidth(), getHeight());
 
-			g.setColor(Color.BLACK);
-			g.fillRect(0, 0, getWidth(), getHeight());
-
-			g.drawImage(currentimage, 0, 0, null);
-
+				int xPos = (int) (0 - timeOff);
+				synchronized (images) {
+					for (BufferedImage image : images) {
+						g.drawImage(image, xPos, 0, null);
+						xPos += image.getWidth();
+					}
+					timeOff += 5d;
+					int firstWidth = images.get(0).getWidth();
+					if (timeOff > firstWidth) {
+						timeOff -= firstWidth;
+						images.remove(0);
+					}
+				}
+			}
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
