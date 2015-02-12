@@ -2,6 +2,7 @@ import java.awt.Canvas;
 import java.awt.Color;
 import java.awt.Cursor;
 import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.event.KeyEvent;
@@ -11,6 +12,7 @@ import java.awt.event.MouseMotionListener;
 import java.awt.event.WindowEvent;
 import java.awt.geom.AffineTransform;
 import java.awt.image.AffineTransformOp;
+import java.awt.image.BufferStrategy;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,19 +20,19 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 
-import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 
 import com.google.gson.Gson;
 
-public class ScrollingMain extends Canvas implements KeyListener,
-		MouseMotionListener {
+public class ScrollingMain extends Canvas implements KeyListener, MouseMotionListener {
 	public static void main(String[] args) {
 		new ScrollingMain();
 	}
 
 	private JFrame frame;
+
+	private final Object LOCK = new Object();
 
 	public ScrollingMain() {
 
@@ -43,111 +45,126 @@ public class ScrollingMain extends Canvas implements KeyListener,
 		this.addMouseMotionListener(this);
 		this.addKeyListener(this);
 
+		createBufferStrategy(2);
+		BufferStrategy bs = getBufferStrategy();
+		
 		requestFocus();
 
 		// Transparent 16 x 16 pixel cursor image.
-		BufferedImage cursorImg = new BufferedImage(16, 16,
-				BufferedImage.TYPE_INT_ARGB);
+		BufferedImage cursorImg = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
 
 		// Create a new blank cursor.
-		Cursor blankCursor = Toolkit.getDefaultToolkit().createCustomCursor(
-				cursorImg, new Point(0, 0), "blank cursor");
+		Cursor blankCursor = Toolkit.getDefaultToolkit().createCustomCursor(cursorImg, new Point(0, 0), "blank cursor");
 
 		// Set the blank cursor to the JFrame.
 		frame.getContentPane().setCursor(blankCursor);
 
-		final int pages = Integer.parseInt(new Variable("imgurscreensaver",
-				"pages", "10", false).getValue());
+		final int pages = Integer.parseInt(new Variable("imgurscreensaver", "pages", "10", false).getValue());
 
-		new Thread(new Runnable() {
-			public void run() {
-				loopPages(pages, new Variable("imgurscreensaver", "subreddit",
-						"annakendrick", false).getValue());
-			}
-		}).start();
+		loopPages(pages, new Variable("imgurscreensaver", "subreddit", "annakendrick", false).getValue());
+		loopPages(pages, "emmawatson");
+		loopPages(pages, "katyperry");
+		loopPages(pages, "selenagomez");
+		// loopPages(pages, "emmawatson");
+
+		int elapsed = 0;
 		while (true) {
 			try {
-				Thread.sleep(35);
+				Thread.sleep(35 - elapsed);
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
-			repaint();
+			long start = System.currentTimeMillis();
+			Graphics2D g = (Graphics2D)bs.getDrawGraphics();
+			render(g);
+			bs.show();
+			long end = System.currentTimeMillis();
+			elapsed = (int) (end - start);
 		}
 
 	}
 
-	private double timeOff = 0;
+	private ArrayList<Double> timeThings = new ArrayList<Double>();
 
-	private void loopPages(int pages, String subreddit) {
-		while (true)
-			for (int page = 0; page < pages; page++)
-				try {
+	private void loopPages(final int pages, final String subreddit) {
+		new Thread(new Runnable() {
+			public void run() {
+				ArrayList<BufferedImage> list = new ArrayList<BufferedImage>();
+				synchronized (LOCK) {
+					images.add(list);
+					timeThings.add(0d);
+				}
 
-					String path = "https://api.imgur.com/3/gallery/r/"
-							+ subreddit + "/time/" + page + ".json";
+				while (true) {
+					for (int page = 0; page < pages; page++) {
+						try {
 
-					HttpURLConnection connection = (HttpURLConnection) ((new URL(
-							path)).openConnection());
+							String path = "https://api.imgur.com/3/gallery/r/" + subreddit + "/time/" + page + ".json";
 
-					System.out.println("Connecting...");
+							HttpURLConnection connection = (HttpURLConnection) ((new URL(path)).openConnection());
 
-					connection.setRequestMethod("GET");
-					// TODO Auto-generated catch block
-					connection.addRequestProperty("Authorization",
-							"client-id 76535d44f1f94da");
-					connection.connect();
+							System.out.println("Connecting...");
 
-					System.out.println("Response recieved with code "
-							+ connection.getResponseCode());
+							connection.setRequestMethod("GET");
 
-					if (connection.getResponseCode() == 200) {
+							connection.addRequestProperty("Authorization", "client-id 76535d44f1f94da");
 
-						InputStream responseStream = connection
-								.getInputStream();
-						StringBuilder builder = new StringBuilder();
-						int j = -1;
-						while ((j = responseStream.read()) != -1)
-							builder.append((char) j);
+							connection.connect();
 
-						System.out.println(builder.toString());
+							System.out.println("Response recieved with code " + connection.getResponseCode());
 
-						Gson gson = new Gson();
-						ImageArray response = gson.fromJson(builder.toString(),
-								ImageArray.class);
+							if (connection.getResponseCode() == 200) {
 
-						for (int imageCounter = 0; imageCounter < response.data.length;) {
+								InputStream responseStream = connection.getInputStream();
+								StringBuilder builder = new StringBuilder();
+								int j = -1;
+								while ((j = responseStream.read()) != -1)
+									builder.append((char) j);
 
-							Image image = response.data[imageCounter];
+								System.out.println(builder.toString());
 
-							if(image.type.equals("image/gif")) imageCounter ++;
-							
-							else if (!(image.nsfw && filterNSFW)
-									&& images.size() < 6) {
-								String url = "http://imgur.com/" + (image.id)
-										+ (parseExtension(image.type));
-								BufferedImage toAdd = convertImage(new ImageIcon(
-										new URL(url)).getImage());
-								toAdd = getScaledImage(toAdd, getWidth(),
-										getHeight());
-								synchronized (images) {
-									images.add(toAdd);
+								Gson gson = new Gson();
+								ImageArray response = gson.fromJson(builder.toString(), ImageArray.class);
+
+								for (int imageCounter = 0; imageCounter < response.data.length;) {
+
+									Image image = response.data[imageCounter];
+
+									if (image.type.equals("image/gif"))
+										imageCounter++;
+
+									else if (!(image.nsfw && filterNSFW) && list.size() < 6) {
+
+										String url = "http://imgur.com/" + (image.id) + (parseExtension(image.type));
+										BufferedImage toAdd = convertImage(new ImageIcon(new URL(url)).getImage());
+										toAdd = getScaledImage(toAdd, getWidth(), getHeight() / images.size());
+
+										synchronized (LOCK) {
+
+											list.add(toAdd);
+
+										}
+
+										imageCounter++;
+									} else {
+										Thread.sleep(SLEEPTIME);
+									}
+
 								}
-								imageCounter++;
-							} else {
-								Thread.sleep(SLEEPTIME);
+
 							}
+						} catch (Exception e) {
 
 						}
-
 					}
-				} catch (Exception e) {
-
 				}
+
+			}
+		}).start();
 	}
 
 	private BufferedImage convertImage(java.awt.Image image) {
-		BufferedImage buffer = new BufferedImage(image.getWidth(null),
-				image.getHeight(null), BufferedImage.TYPE_INT_ARGB);
+		BufferedImage buffer = new BufferedImage(image.getWidth(null), image.getHeight(null), BufferedImage.TYPE_INT_ARGB);
 		buffer.getGraphics().drawImage(image, 0, 0, null);
 		return buffer;
 	}
@@ -164,22 +181,13 @@ public class ScrollingMain extends Canvas implements KeyListener,
 		}
 	}
 
-	private ArrayList<BufferedImage> images = new ArrayList<BufferedImage>();
+	private ArrayList<ArrayList<BufferedImage>> images = new ArrayList<ArrayList<BufferedImage>>();
 
-	private boolean filterNSFW = Boolean.parseBoolean(new Variable(
-			"imgurscreensaver", "filterNSFW", "true", false).getValue());
+	private boolean filterNSFW = Boolean.parseBoolean(new Variable("imgurscreensaver", "filterNSFW", "true", false).getValue());
 
 	private static final long SLEEPTIME = 500;
 
-	public void update(Graphics g) {
-		java.awt.Image buffer = createImage(getWidth(), getHeight());
-		Graphics g2 = buffer.getGraphics();
-		paint(g2);
-		g.drawImage(buffer, 0, 0, null);
-	}
-
-	private BufferedImage getScaledImage(BufferedImage image, int width,
-			int height) throws IOException {
+	private BufferedImage getScaledImage(BufferedImage image, int width, int height) throws IOException {
 
 		int imageWidth = image.getWidth();
 		int imageHeight = image.getHeight();
@@ -189,7 +197,6 @@ public class ScrollingMain extends Canvas implements KeyListener,
 
 		double aspect = (double) imageWidth / imageHeight;
 		double screenAspect = ((double) getWidth() / getHeight());
-		System.out.println("" + aspect + "\n" + screenAspect);
 		// fill or fit bit
 
 		if (scaleX > scaleY)
@@ -198,24 +205,19 @@ public class ScrollingMain extends Canvas implements KeyListener,
 			scaleY = scaleX;
 
 		// give us the transform object thing
-		AffineTransform scaleTransform = AffineTransform.getScaleInstance(
-				scaleX, scaleY);
+		AffineTransform scaleTransform = AffineTransform.getScaleInstance(scaleX, scaleY);
 
 		// then make the scaling algorithm thing.
-		AffineTransformOp bilinearScaleOp = new AffineTransformOp(
-				scaleTransform, AffineTransformOp.TYPE_BILINEAR);
+		AffineTransformOp bilinearScaleOp = new AffineTransformOp(scaleTransform, AffineTransformOp.TYPE_BILINEAR);
 
 		// out new image that we need to crop onto the buffer with the right
 		// dimensions.
-		BufferedImage newImage = bilinearScaleOp.filter(image,
-				new BufferedImage((int) (imageWidth * scaleX),
-						(int) (imageHeight * scaleY), image.getType()));
+		BufferedImage newImage = bilinearScaleOp.filter(image, new BufferedImage((int) (imageWidth * scaleX), (int) (imageHeight * scaleY), image.getType()));
 		// Image newImage = image.getScaledInstance((int) (imageWidth * scaleX),
 		// (int) (imageWidth * scaleY), Image.SCALE_SMOOTH);
 
 		// make the buffer
-		BufferedImage buffer = new BufferedImage((int) (imageWidth * scaleX),
-				(int) (imageHeight * scaleY), BufferedImage.TYPE_INT_ARGB);
+		BufferedImage buffer = new BufferedImage((int) (imageWidth * scaleX), (int) (imageHeight * scaleY), BufferedImage.TYPE_INT_ARGB);
 		Graphics g = buffer.getGraphics();
 
 		int newImageWidth = newImage.getWidth(null);
@@ -228,35 +230,43 @@ public class ScrollingMain extends Canvas implements KeyListener,
 		return buffer;
 	}
 
-	public void paint(Graphics g) {
+	public void render(Graphics g) {
 
-		g.setColor(Color.BLACK);
-		g.fillRect(0, 0, getWidth(), getHeight());
-		g.setColor(Color.WHITE);
-		g.drawString("Connecting to server...", 0, getHeight());
-		try {
-			// BufferedImage image = (BufferedImage) ImageIO.read(new
-			// URL(currentURL));
-			if (images.size() > 0) {
-				g.setColor(Color.BLACK);
-				g.fillRect(0, 0, getWidth(), getHeight());
+		synchronized (LOCK) {
+			g.setColor(Color.BLACK);
+			g.fillRect(0, 0, getWidth(), getHeight());
+			g.setColor(Color.WHITE);
+			g.drawString("Connecting to server...", 0, getHeight());
+			try {
+				// BufferedImage image = (BufferedImage) ImageIO.read(new
+				// URL(currentURL));
+				if (images.size() > 0) {
+					/*
+					 * g.setColor(Color.BLACK); g.fillRect(0, 0, getWidth(),
+					 * getHeight());
+					 */
+					int i = 0;
 
-				int xPos = (int) (0 - timeOff);
-				synchronized (images) {
-					for (BufferedImage image : images) {
-						g.drawImage(image, xPos, 0, null);
-						xPos += image.getWidth();
+					for (ArrayList<BufferedImage> list : images) {
+						int xPos = (int) (0 - timeThings.get(i));
+						for (BufferedImage image : list) {
+							g.drawImage(image, xPos, i * (getHeight() / images.size()), null);
+							xPos += image.getWidth();
+						}
+						timeThings.set(i, timeThings.get(i) + 10d);
+						int firstWidth = list.get(0).getWidth();
+						if (timeThings.get(i) > firstWidth) {
+							timeThings.set(i, timeThings.get(i) - firstWidth);
+							list.remove(0);
+						}
+
+						i++;
 					}
-					timeOff += 5d;
-					int firstWidth = images.get(0).getWidth();
-					if (timeOff > firstWidth) {
-						timeOff -= firstWidth;
-						images.remove(0);
-					}
+
 				}
+			} catch (Exception e) {
+				e.printStackTrace();
 			}
-		} catch (Exception e) {
-			e.printStackTrace();
 		}
 
 	}
