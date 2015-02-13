@@ -61,10 +61,11 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 
 		final int pages = Integer.parseInt(new Variable("imgurscreensaver", "pages", "10", false).getValue());
 
-		loopPages(pages, new Variable("imgurscreensaver", "subreddit", "annakendrick", false).getValue());
-		loopPages(pages, "emmawatson");
-		loopPages(pages, "katyperry");
-		loopPages(pages, "selenagomez");
+		int subreddits = Integer.parseInt(new Variable("imgurscreensaver", "subreddits", "1", false).getValue());
+		for(int i = 0; i < subreddits; i ++) {
+			loopPages(pages, new Variable("imgurscreensaver", "subreddit-" + i, "annakendrick", false).getValue());
+		}
+		
 		// loopPages(pages, "emmawatson");
 
 		int elapsed = 0;
@@ -133,7 +134,7 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 									if (image.type.equals("image/gif"))
 										imageCounter++;
 
-									else if (!(image.nsfw && filterNSFW) && list.size() < 6) {
+									else if (!(image.nsfw && filterNSFW) && list.size() < (3*images.size())) {
 
 										String url = "http://imgur.com/" + (image.id) + (parseExtension(image.type));
 										BufferedImage toAdd = convertImage(new ImageIcon(new URL(url)).getImage());
@@ -253,7 +254,7 @@ public class ScrollingMain extends Canvas implements KeyListener, MouseMotionLis
 							g.drawImage(image, xPos, i * (getHeight() / images.size()), null);
 							xPos += image.getWidth();
 						}
-						timeThings.set(i, timeThings.get(i) + 10d);
+						timeThings.set(i, timeThings.get(i) + 5d/images.size());
 						int firstWidth = list.get(0).getWidth();
 						if (timeThings.get(i) > firstWidth) {
 							timeThings.set(i, timeThings.get(i) - firstWidth);
