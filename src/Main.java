@@ -25,7 +25,7 @@ import com.google.gson.Gson;
 
 public class Main extends Canvas implements KeyListener, MouseMotionListener {
 	public static void main(String[] args) {
-		new Main();
+		new ScrollingMain();
 	}
 
 	private JFrame frame;
